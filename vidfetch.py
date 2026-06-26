@@ -1,7 +1,7 @@
 """
-VidFetch — 批量视频下载器
-输入多个视频网址，按预设画质自动获取格式并下载合并。
-依赖: pip install customtkinter yt-dlp pywinstyles
+VidFetch — Batch Video Downloader / 批量视频下载器
+Paste multiple URLs, auto-fetch formats, download in parallel and merge to MP4.
+Dependencies: pip install customtkinter yt-dlp pywinstyles
 """
 
 import os
@@ -22,7 +22,7 @@ from ui_utils import (
 )
 
 # ═══════════════════════════════════════════════════════════
-# 画质预设 → yt-dlp 格式选择器
+# Quality presets → yt-dlp format selectors / 画质预设 → yt-dlp 格式选择器
 # ═══════════════════════════════════════════════════════════
 
 PRESETS = {
@@ -52,7 +52,7 @@ MAX_CONCURRENT = 3  # 同时下载的最大数量
 
 
 # ═══════════════════════════════════════════════════════════
-# 主应用
+# Main Application / 主应用
 # ═══════════════════════════════════════════════════════════
 
 class VidFetchApp:
@@ -103,7 +103,7 @@ class VidFetchApp:
         self.root.mainloop()
 
     # ═══════════════════════════════════════════════════════
-    # UI 构建
+    # UI Construction / UI 构建
     # ═══════════════════════════════════════════════════════
 
     def _build_ui(self):
@@ -112,7 +112,7 @@ class VidFetchApp:
         self.root.grid_columnconfigure(0, weight=1)
         self.root.grid_rowconfigure(0, weight=1)
 
-        # ── 主容器 ──
+        # ── Main container / 主容器 ──
         main = ctk.CTkFrame(self.root, fg_color="transparent")
         main.grid(row=0, column=0, sticky='nsew', padx=14, pady=(10, 6))
         main.grid_columnconfigure(1, weight=1)
@@ -435,7 +435,7 @@ class VidFetchApp:
         self.fmt_tree.bind('<Double-1>', self._on_fmt_tree_select)
 
     # ═══════════════════════════════════════════════════════
-    # URL 输入辅助
+    # URL Input Helpers / URL 输入辅助
     # ═══════════════════════════════════════════════════════
 
     def _show_url_placeholder(self):
@@ -456,7 +456,7 @@ class VidFetchApp:
             self._url_placeholder_shown = False
 
     def _get_urls_from_input(self):
-        """从 URL 文本框提取 URL 列表（按 http 边界智能分割，去空、去重）"""
+        """Extract URL list from text area — smart-split on http boundaries, dedupe. / 从文本框提取 URL 列表，按 http 边界智能分割去重。"""
         raw = self.url_text.get('1.0', 'end-1c').strip()
         if getattr(self, '_url_placeholder_shown', False):
             return []
@@ -509,11 +509,11 @@ class VidFetchApp:
             pass
 
     # ═══════════════════════════════════════════════════════
-    # 队列管理
+    # Queue Management / 队列管理
     # ═══════════════════════════════════════════════════════
 
     def _add_to_queue(self):
-        """从 URL 文本框解析网址并添加到队列"""
+        """Parse URLs from text area and add to download queue. / 从文本框解析网址并添加到队列。"""
         if self.batch_running:
             messagebox.showwarning("提示", "批量下载进行中，无法添加")
             return
@@ -568,7 +568,7 @@ class VidFetchApp:
             self._preview_queue_item(0)
 
     def _update_queue_ui(self):
-        """刷新队列表格"""
+        """Refresh the queue treeview from self.queue data. / 根据队列数据刷新表格显示。"""
         self.queue_tree.delete(*self.queue_tree.get_children())
 
         for i, item in enumerate(self.queue):
@@ -796,11 +796,11 @@ class VidFetchApp:
             self._log("队列已清空")
 
     # ═══════════════════════════════════════════════════════
-    # 批量下载
+    # Batch Download / 批量下载
     # ═══════════════════════════════════════════════════════
 
     def _start_batch(self):
-        """开始批量下载"""
+        """Validate queue, pick output dir, launch parallel download workers. / 校验队列、选目录、启动并行下载。"""
         if self.batch_running:
             return
 
@@ -856,7 +856,7 @@ class VidFetchApp:
                         daemon=True).start()
 
     def _batch_worker(self, fmt_selector, cookies_content):
-        """后台批量处理主循环 —— 并行下载，由用户选择同时数量"""
+        """Background batch main loop — spawn parallel download threads for each queue item. / 后台批量主循环，为每个队列项创建并行下载线程。"""
         cookie_file = self._save_cookies_to_temp(cookies_content)
         semaphore = threading.Semaphore(self.max_concurrent)
         threads = []
@@ -888,7 +888,7 @@ class VidFetchApp:
         self.root.after(0, lambda: self._on_batch_complete(done, errs, skipped))
 
     def _download_one(self, idx, item, fmt_selector, cookie_file, semaphore):
-        """下载单个队列项（在独立线程中运行，受 semaphore 并发控制）"""
+        """Download a single queue item — runs in its own thread, gated by semaphore. / 下载单个队列项，独立线程运行，受 semaphore 并发控制。"""
         with semaphore:
             if self.batch_cancelled:
                 item['status'] = 'skipped'
@@ -1112,11 +1112,11 @@ class VidFetchApp:
                                      command=self._start_batch, state="disabled")
 
     # ═══════════════════════════════════════════════════════
-    # 格式预览（可折叠面板）
+    # Format Preview / 格式预览
     # ═══════════════════════════════════════════════════════
 
     def _auto_fetch_info(self, idx, cookies_content):
-        """后台自动获取队列项的标题和格式信息"""
+        """Background auto-fetch: get title + formats for a queue item without downloading. / 后台自动获取队列项的标题和格式信息。"""
         item = self.queue[idx]
         url = item['url']
         item['status'] = 'fetching'
@@ -1337,7 +1337,7 @@ class VidFetchApp:
                 self.fmt_tree.item(item_id, values=tuple(current), tags=(base_tag, tag))
 
     # ═══════════════════════════════════════════════════════
-    # 通用工具
+    # Utilities / 通用工具
     # ═══════════════════════════════════════════════════════
 
     def _log(self, msg):
@@ -1377,7 +1377,7 @@ class VidFetchApp:
 
 
 # ═══════════════════════════════════════════════════════════
-# 入口
+# Entry Point / 入口
 # ═══════════════════════════════════════════════════════════
 
 if __name__ == "__main__":

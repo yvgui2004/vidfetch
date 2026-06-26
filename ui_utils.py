@@ -1,12 +1,11 @@
 """
-桌面 GUI 美化工具模块
-=====================
-包含: 配色方案、窗口 Mica 效果、WTreeview 主题、右键菜单等
+Desktop GUI styling utilities / 桌面 GUI 美化工具模块
+====================================================
+Includes: color palettes, window Mica effect, Treeview themes, popup menus, etc.
 
-pip 依赖:
-    pip install customtkinter pywinstyles
+pip dependencies: pip install customtkinter pywinstyles
 
-用法:
+Usage / 用法:
     from ui_utils import (ThemeColors, CTkPopupMenu,
                           apply_window_effect, apply_treeview_theme,
                           create_card, create_sidebar_button, create_accent_button)
@@ -26,15 +25,15 @@ except ImportError:
 
 
 # ═══════════════════════════════════════════════════════
-# 1. 配色方案
+# 1. Color Palette / 配色方案
 # ═══════════════════════════════════════════════════════
 
 class ThemeColors:
-    """明/暗双主题完整色板。
+    """Complete light/dark dual-theme color palette. / 明/暗双主题完整色板。
 
-    用法:
-        c = ThemeColors.palette(dark=True)  # 暗色
-        c = ThemeColors.palette(dark=False) # 亮色
+    Usage / 用法:
+        c = ThemeColors.palette(dark=True)   # dark / 暗色
+        c = ThemeColors.palette(dark=False)  # light / 亮色
     """
     @staticmethod
     def palette(dark: bool = False) -> dict:
@@ -97,16 +96,16 @@ class ThemeColors:
 
 
 # ═══════════════════════════════════════════════════════
-# 2. 窗口 Mica / Acrylic 效果
+# 2. Window Mica / Acrylic Effect / 窗口 Mica 效果
 # ═══════════════════════════════════════════════════════
 
 def apply_window_effect(window: tk.Toplevel, dark: bool = False, bg_color: str = "#0d1117"):
-    """对任意窗口应用 Windows 11 标题栏效果。
+    """Apply Windows 11 title bar effect to any window. / 对任意窗口应用 Windows 11 标题栏效果。
 
-    参数:
-        window:   目标 tk.Toplevel 或 ctk.CTk
-        dark:     True = 暗色标题栏, False = 亮色
-        bg_color: 标题栏底色 (与窗口背景保持一致)
+    Args:
+        window:   Target tk.Toplevel or ctk.CTk
+        dark:     True = dark title bar, False = light
+        bg_color: Title bar background color (match window background)
     """
     if not HAS_PYWINSTYLES:
         return
@@ -126,7 +125,7 @@ def apply_mica(window: tk.Toplevel, dark: bool = False, bg_color: str = "#0d1117
 
 
 # ═══════════════════════════════════════════════════════
-# 3. Treeview 主题 (ttk)
+# 3. Treeview Theme (ttk) / Treeview 主题
 # ═══════════════════════════════════════════════════════
 
 def apply_treeview_theme(tree: ttk.Treeview, c: dict, font_family: str = "微软雅黑",
@@ -194,18 +193,18 @@ def apply_treeview_theme(tree: ttk.Treeview, c: dict, font_family: str = "微软
 
 
 # ═══════════════════════════════════════════════════════
-# 4. 自定义 CTk 右键菜单
+# 4. Custom CTk Popup Menu / 自定义右键菜单
 # ═══════════════════════════════════════════════════════
 
 class CTkPopupMenu:
-    """现代圆角弹出菜单, 替代 tk.Menu。
+    """Modern rounded popup menu, replaces tk.Menu. / 现代圆角弹出菜单，替代 tk.Menu。
 
-    用法:
+    Usage / 用法:
         menu = CTkPopupMenu(parent_window, ThemeColors.palette(dark=True),
                             font_family="微软雅黑", font_size=14)
-        menu.add_command(label="打开文件", icon="📄", command=open_file)
+        menu.add_command(label="Open File", icon="📄", command=open_file)
         menu.add_separator()
-        menu.add_command(label="删除", icon="🗑", command=delete, danger=True)
+        menu.add_command(label="Delete", icon="🗑", command=delete, danger=True)
         menu.popup(x, y)
     """
 
@@ -337,7 +336,7 @@ class CTkPopupMenu:
 
 
 # ═══════════════════════════════════════════════════════
-# 5. 快捷组件工厂
+# 5. Component Factory / 快捷组件工厂
 # ═══════════════════════════════════════════════════════
 
 def create_card(parent, c: dict, corner_radius: int = 10, **pack_kw) -> ctk.CTkFrame:
@@ -409,7 +408,7 @@ def create_entry(parent, variable, c: dict,
 
 
 # ═══════════════════════════════════════════════════════
-# 6. 通用辅助
+# 6. General Helpers / 通用辅助
 # ═══════════════════════════════════════════════════════
 
 def _lighten(hex_color: str, factor: float = 0.1) -> str:
