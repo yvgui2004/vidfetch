@@ -18,7 +18,7 @@ from ui_utils import (
     ThemeColors, CTkPopupMenu,
     apply_window_effect, apply_treeview_theme,
     create_card, create_label, create_separator,
-    create_entry, center_window,
+    create_entry,
 )
 
 # ═══════════════════════════════════════════════════════════
@@ -59,8 +59,15 @@ class VidFetchApp:
     def __init__(self):
         self.root = ctk.CTk()
         self.root.title("VidFetch")
-        self.root.geometry("1150x720")
         self.root.minsize(950, 550)
+        # 根据屏幕分辨率计算居中位置
+        sw = self.root.winfo_screenwidth()
+        sh = self.root.winfo_screenheight()
+        w, h = 1150, 720
+        x = (sw - w) // 2
+        y = (sh - h) // 2
+        self.root.geometry(f"{w}x{h}+{x}+{y}")
+        self.root.withdraw()  # 隐藏窗口，避免构建过程中闪跳
 
         # 图标
         icon_path = Path(__file__).parent / "vidfetch.ico"
@@ -99,7 +106,7 @@ class VidFetchApp:
         self.root.bind_all('<Button-3>', self._on_global_click, add='+')
 
         apply_window_effect(self.root, dark=self.dark, bg_color=self.c['bg'])
-        center_window(self.root)
+        self.root.deiconify()  # 构建完成后再显示，避免闪跳
         self.root.mainloop()
 
     # ═══════════════════════════════════════════════════════
@@ -185,7 +192,8 @@ class VidFetchApp:
 
         self.url_text = ctk.CTkTextbox(
             sidebar, wrap="word", fg_color=c['input_bg'], text_color=c['fg'],
-            font=(f, s), corner_radius=8, border_width=1, border_color=c['border'])
+            font=(f, s), corner_radius=8, border_width=1, border_color=c['border'],
+            activate_scrollbars=False)
         self.url_text.pack(fill=tk.BOTH, expand=True, padx=14, pady=(0, 6))
         self.url_text.bind('<FocusIn>', self._clear_url_placeholder)
         self.url_text.bind('<Button-1>', self._clear_url_placeholder)
@@ -246,7 +254,8 @@ class VidFetchApp:
 
         self.cookies_text = ctk.CTkTextbox(
             sidebar, wrap="word", fg_color=c['input_bg'], text_color=c['fg'],
-            font=(f, s - 1), corner_radius=8, border_width=1, border_color=c['border'])
+            font=(f, s - 1), corner_radius=8, border_width=1, border_color=c['border'],
+            activate_scrollbars=False)
         self.cookies_text.pack(fill=tk.BOTH, expand=True, padx=14, pady=(0, 14))
 
     def _build_right_panel(self, parent):
@@ -278,6 +287,18 @@ class VidFetchApp:
                                             font_family=f, font_size=s - 1)
         self.lbl_queue_count.pack(side=tk.LEFT, padx=(8, 0))
 
+        # 全选 / 反选
+        ctk.CTkButton(qheader, text="☑ 全选", width=60, height=24,
+                      fg_color=c['button_bg'], hover_color=c['button_hover'],
+                      text_color=c['fg'], font=(f, s - 2), corner_radius=5,
+                      command=lambda: self._toggle_all_checked(True)) \
+            .pack(side=tk.RIGHT, padx=(2, 0))
+        ctk.CTkButton(qheader, text="☐ 反选", width=60, height=24,
+                      fg_color=c['button_bg'], hover_color=c['button_hover'],
+                      text_color=c['fg'], font=(f, s - 2), corner_radius=5,
+                      command=lambda: self._toggle_all_checked(False)) \
+            .pack(side=tk.RIGHT, padx=(2, 0))
+
         # 总进度
         self.overall_bar = ctk.CTkProgressBar(
             queue_card, mode='determinate', height=6, corner_radius=3)
@@ -295,20 +316,25 @@ class VidFetchApp:
         table_frame.grid_rowconfigure(0, weight=1)
         table_frame.grid_columnconfigure(0, weight=1)
 
-        columns = ("status_icon", "index", "title", "progress", "size")
+        columns = ("check", "status_icon", "index", "title", "progress", "size")
         self.queue_tree = ttk.Treeview(
             table_frame, columns=columns, show="headings", selectmode='browse')
+        self.queue_tree.heading("check", text="☑")
         self.queue_tree.heading("status_icon", text="")
         self.queue_tree.heading("index", text="#")
         self.queue_tree.heading("title", text="标题")
         self.queue_tree.heading("progress", text="进度")
         self.queue_tree.heading("size", text="大小")
 
+        self.queue_tree.column("check", width=36, anchor='center', stretch=False)
         self.queue_tree.column("status_icon", width=36, anchor='center', stretch=False)
-        self.queue_tree.column("index", width=36, anchor='center', stretch=False)
-        self.queue_tree.column("title", width=360, anchor='w')
+        self.queue_tree.column("index", width=30, anchor='center', stretch=False)
+        self.queue_tree.column("title", width=340, anchor='w')
         self.queue_tree.column("progress", width=100, anchor='center')
         self.queue_tree.column("size", width=80, anchor='center')
+
+        # 双击切换勾选
+        self.queue_tree.bind('<Double-1>', self._on_double_click)
 
         apply_treeview_theme(self.queue_tree, c, font_family=f, font_size=s - 1, row_height=34)
 
@@ -532,18 +558,7 @@ class VidFetchApp:
             return
 
         for url in new_urls:
-            self.queue.append({
-                'url': url,
-                'title': '',
-                'status': 'waiting',
-                'progress': 0.0,
-                'speed': '',
-                'filesize': '',
-                'error': '',
-                'formats': [],
-                'best_video_id': None,
-                'best_audio_id': None,
-            })
+            self.queue.append(self._make_queue_item(url))
 
         skipped = len(urls) - len(new_urls)
         msg = f"已添加 {len(new_urls)} 个网址到队列"
@@ -575,6 +590,7 @@ class VidFetchApp:
             status = item['status']
             icon = STATUS_ICONS.get(status, '⏳')
             idx_str = f"#{i + 1}"
+            check_mark = "☑" if item.get('checked', True) else "☐"
 
             # 标题（优先标题，未获取时显示简短 URL）
             if item['title']:
@@ -622,7 +638,7 @@ class VidFetchApp:
 
             tree_iid = self.queue_tree.insert(
                 "", tk.END,
-                values=(icon, idx_str, title, prog_str, size_str),
+                values=(check_mark, icon, idx_str, title, prog_str, size_str),
                 tags=(base_tag, status_tag))
             item['_tree_iid'] = tree_iid
 
@@ -634,8 +650,41 @@ class VidFetchApp:
 
         self._update_overall_progress()
 
-    def _on_queue_select(self, event):
-        """单击队列行 → 自动切换格式预览"""
+    def _on_double_click(self, event):
+        """双击任意列 → 切换该行勾选状态"""
+        row_iid = self.queue_tree.identify_row(event.y)
+        if not row_iid:
+            return
+        for i, item in enumerate(self.queue):
+            if item.get('_tree_iid') == row_iid:
+                item['checked'] = not item.get('checked', True)
+                self._update_queue_ui()
+                break
+
+    def _toggle_all_checked(self, checked):
+        """全选/反选队列中所有项"""
+        for item in self.queue:
+            item['checked'] = checked
+        self._update_queue_ui()
+
+    def _on_queue_select(self, event=None):
+        """单击队列行 → 复选框切换 或 格式预览"""
+        if event is not None:
+            # 判断点击位置
+            region = self.queue_tree.identify_region(event.x, event.y)
+            col = self.queue_tree.identify_column(event.x)
+            row_iid = self.queue_tree.identify_row(event.y)
+
+            if col == '#1' and region == 'cell' and row_iid:
+                # 点击复选框列 → 切换勾选
+                for i, item in enumerate(self.queue):
+                    if item.get('_tree_iid') == row_iid:
+                        item['checked'] = not item.get('checked', True)
+                        self._update_queue_ui()
+                        return
+            elif col == '#1':
+                return  # 点复选框但不在数据行上，不触发预览
+
         sel = self.queue_tree.selection()
         if not sel:
             return
@@ -645,11 +694,9 @@ class VidFetchApp:
                 self.lbl_preview_title.configure(text=f"(#{i + 1})")
 
                 if item.get('formats'):
-                    # 已有缓存，直接显示
                     self._populate_fmt_table(item['formats'], item.get('title', ''))
                     self.lbl_title.configure(text=f"📺 {item['title'][:60]}" if item['title'] else "📺 (获取中…)")
                 else:
-                    # 尚未获取
                     self.lbl_title.configure(text="📺 (获取中…)" if item['status'] == 'fetching' else "📺 (等待获取)")
                     self.fmt_tree.delete(*self.fmt_tree.get_children())
                     self.video_fmt_var.set("—")
@@ -769,6 +816,7 @@ class VidFetchApp:
         item = self.queue[idx]
         if item['status'] in ('error', 'skipped'):
             item['status'] = 'waiting'
+            item['checked'] = True
             item['progress'] = 0.0
             item['speed'] = ''
             item['error'] = ''
@@ -809,20 +857,15 @@ class VidFetchApp:
             urls = self._get_urls_from_input()
             if urls:
                 for url in urls:
-                    self.queue.append({
-                        'url': url, 'title': '', 'status': 'waiting',
-                        'progress': 0.0, 'speed': '', 'filesize': '',
-                        'error': '', 'formats': [], 'best_video_id': None,
-                        'best_audio_id': None,
-                    })
+                    self.queue.append(self._make_queue_item(url))
                 self._update_queue_ui()
 
         if not self.queue:
             messagebox.showwarning("提示", "队列为空，请先添加下载网址")
             return
 
-        # 过滤已完成项，只处理 waiting / error
-        pending = [q for q in self.queue if q['status'] not in ('done',)]
+        # 只处理勾选 + 非完成项
+        pending = [q for q in self.queue if q.get('checked', True) and q['status'] not in ('done',)]
         if not pending:
             if messagebox.askyesno("提示", "所有项目已完成。要重新下载全部吗？"):
                 for q in self.queue:
@@ -848,7 +891,8 @@ class VidFetchApp:
         self.batch_running = True
         self.batch_cancelled = False
         self._set_ui_enabled(False)
-        self._log(f"🚀 开始批量下载 ({len([q for q in self.queue if q['status'] != 'done'])} 个) → {self.output_dir}")
+        checked_count = len([q for q in self.queue if q.get('checked', True)])
+        self._log(f"🚀 开始批量下载 ({checked_count} 个已勾选) → {self.output_dir}")
         self._update_queue_ui()
 
         threading.Thread(target=self._batch_worker,
@@ -867,6 +911,11 @@ class VidFetchApp:
                 self.root.after(0, self._update_queue_ui)
                 break
 
+            # 跳过未勾选和已完成的项
+            if not item.get('checked', True):
+                item['status'] = 'skipped'
+                self.root.after(0, self._update_queue_ui)
+                continue
             if item['status'] == 'done':
                 continue
 
@@ -1363,7 +1412,7 @@ class VidFetchApp:
             'url': url, 'title': '', 'status': 'waiting',
             'progress': 0.0, 'speed': '', 'filesize': '',
             'error': '', 'formats': [], 'best_video_id': None,
-            'best_audio_id': None,
+            'best_audio_id': None, 'checked': True,
         }
 
     def _populate_best_formats(self, item):
