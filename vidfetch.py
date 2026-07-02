@@ -58,7 +58,7 @@ MAX_CONCURRENT = 3  # 同时下载的最大数量
 class VidFetchApp:
     def __init__(self):
         self.root = ctk.CTk()
-        self.root.title("VidFetch — 批量视频下载器")
+        self.root.title("VidFetch")
         self.root.geometry("1150x720")
         self.root.minsize(950, 550)
 
@@ -1134,35 +1134,56 @@ class VidFetchApp:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
 
-            item['title'] = info.get('title', '未知标题')
-            item['formats'] = info.get('formats', [])
+            # 检测多 P 视频（播放列表）
+            if info.get('_type') == 'playlist' and info.get('entries'):
+                entries = info['entries']
+                playlist_title = info.get('title', item['title'])
 
-            # 自动检测最佳格式
-            best_vid_tbr = -1
-            best_aud_tbr = -1
-            for fmt in item['formats']:
-                vcodec = fmt.get('vcodec', 'none')
-                acodec = fmt.get('acodec', 'none')
-                has_v = vcodec and vcodec != 'none'
-                has_a = acodec and acodec != 'none'
-                tbr = fmt.get('tbr') or 0
-                if has_v and tbr > best_vid_tbr:
-                    best_vid_tbr = tbr
-                    item['best_video_id'] = fmt.get('format_id')
-                if has_a and not has_v and tbr > best_aud_tbr:
-                    best_aud_tbr = tbr
-                    item['best_audio_id'] = fmt.get('format_id')
+                def expand_playlist():
+                    # 更新当前项为第一 P
+                    first = entries[0]
+                    item['title'] = first.get('title', f'{playlist_title} - P1')
+                    item['url'] = first.get('webpage_url', first.get('url', url))
+                    item['formats'] = first.get('formats', [])
+                    item['status'] = 'waiting'
+                    self._populate_best_formats(item)
 
-            item['status'] = 'waiting'
-            self.root.after(0, self._update_queue_ui)
-            self.root.after(0, lambda t=item['title'][:50]: self._log(f"✅ 已获取: {t}"))
+                    # 插入剩余分 P
+                    insert_pos = idx + 1
+                    for ei, entry in enumerate(entries[1:], start=2):
+                        entry_title = entry.get('title', f'{playlist_title} - P{ei}')
+                        entry_url = entry.get('webpage_url', entry.get('url', url))
+                        new_item = self._make_queue_item(entry_url)
+                        new_item['title'] = entry_title
+                        new_item['url'] = entry_url
+                        new_item['formats'] = entry.get('formats', [])
+                        new_item['status'] = 'waiting'
+                        self._populate_best_formats(new_item)
+                        self.queue.insert(insert_pos, new_item)
+                        insert_pos += 1
 
-            # 如果是当前选中的预览项，刷新预览面板
-            if idx == self.preview_queue_index:
-                self.root.after(0, lambda: self._populate_fmt_table(
-                    item['formats'], item['title']))
-                self.root.after(0, lambda: self.lbl_title.configure(
-                    text=f"📺 {item['title'][:60]}"))
+                    self._update_queue_ui()
+                    if idx == self.preview_queue_index:
+                        self._populate_fmt_table(item['formats'], item['title'])
+                        self.lbl_title.configure(text=f"📺 {item['title'][:60]}")
+                    self._log(f"✅ 检测到 {len(entries)}P: {playlist_title[:40]}")
+
+                self.root.after(0, expand_playlist)
+            else:
+                # 单视频
+                item['title'] = info.get('title', '未知标题')
+                item['formats'] = info.get('formats', [])
+                self._populate_best_formats(item)
+                item['status'] = 'waiting'
+
+                self.root.after(0, self._update_queue_ui)
+                self.root.after(0, lambda t=item['title'][:50]: self._log(f"✅ 已获取: {t}"))
+
+                if idx == self.preview_queue_index:
+                    self.root.after(0, lambda: self._populate_fmt_table(
+                        item['formats'], item['title']))
+                    self.root.after(0, lambda: self.lbl_title.configure(
+                        text=f"📺 {item['title'][:60]}"))
 
         except Exception as e:
             item['status'] = 'waiting'
@@ -1336,6 +1357,32 @@ class VidFetchApp:
                 current[0] = mark
                 self.fmt_tree.item(item_id, values=tuple(current), tags=(base_tag, tag))
 
+    def _make_queue_item(self, url):
+        """Create a fresh queue item dict. / 创建新的队列项字典。"""
+        return {
+            'url': url, 'title': '', 'status': 'waiting',
+            'progress': 0.0, 'speed': '', 'filesize': '',
+            'error': '', 'formats': [], 'best_video_id': None,
+            'best_audio_id': None,
+        }
+
+    def _populate_best_formats(self, item):
+        """Scan item['formats'] and set best_video_id / best_audio_id by highest tbr. / 扫描格式列表，按最高码率标记最佳视频/音频。"""
+        best_vid_tbr = -1
+        best_aud_tbr = -1
+        for fmt in item.get('formats', []):
+            vcodec = fmt.get('vcodec', 'none')
+            acodec = fmt.get('acodec', 'none')
+            has_v = vcodec and vcodec != 'none'
+            has_a = acodec and acodec != 'none'
+            tbr = fmt.get('tbr') or 0
+            if has_v and tbr > best_vid_tbr:
+                best_vid_tbr = tbr
+                item['best_video_id'] = fmt.get('format_id')
+            if has_a and not has_v and tbr > best_aud_tbr:
+                best_aud_tbr = tbr
+                item['best_audio_id'] = fmt.get('format_id')
+
     # ═══════════════════════════════════════════════════════
     # Utilities / 通用工具
     # ═══════════════════════════════════════════════════════
@@ -1348,17 +1395,30 @@ class VidFetchApp:
         self.log_text.configure(state="disabled")
 
     def _save_cookies_to_temp(self, content):
-        """将 Cookie 内容写入临时文件"""
+        """将 Cookie 内容写入临时文件，自动修复常见格式问题"""
         content = (content or '').strip()
         if not content:
             return None
+        # 修复 Cookie-Editor 导出的 #HttpOnly_ 前缀（Python http.cookiejar 不支持）
+        lines = content.split('\n')
+        fixed_lines = []
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                # 保留纯注释行，但跳过 #HttpOnly_ 前缀行（改为普通行）
+                if line.startswith('#HttpOnly_'):
+                    fixed_lines.append(line[len('#HttpOnly_'):])
+                else:
+                    fixed_lines.append(line)
+            else:
+                fixed_lines.append(line)
         if not self.cookies_path:
             import tempfile
             fd, self.cookies_path = tempfile.mkstemp(
                 suffix='.txt', prefix='ytdlp_cookies_', text=True)
             os.close(fd)
         with open(self.cookies_path, 'w', encoding='utf-8') as fh:
-            fh.write(content)
+            fh.write('\n'.join(fixed_lines))
         return self.cookies_path
 
     def _on_close(self):
